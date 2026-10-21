@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { render } from "@react-email/render";
 import { siteConfig } from "@/config/site";
+import ContactLeadEmail from "@/emails/ContactLeadEmail";
 
-// Simple in-memory rate limiting (resets on serverless cold start — acceptable for launch)
 const recentRequests = new Map<string, number[]>();
 const RATE_LIMIT = 3;
 const WINDOW_MS = 60_000;
@@ -24,9 +25,8 @@ export async function POST(req: NextRequest) {
 
   const data = await req.formData();
 
-  // Honeypot
   if (data.get("website_ref")) {
-    return NextResponse.json({ ok: true }); // silent discard
+    return NextResponse.json({ ok: true });
   }
 
   const name = (data.get("name") as string | null)?.trim() ?? "";
@@ -43,11 +43,22 @@ export async function POST(req: NextRequest) {
   const resend = new Resend(process.env.RESEND_API_KEY);
 
   try {
+    const html = await render(
+      ContactLeadEmail({
+        name,
+        email,
+        subject,
+        message,
+        submittedAt: new Date().toLocaleString("en-GB", { timeZone: "Africa/Lagos" }),
+      })
+    );
+
     await resend.emails.send({
       from: fromEmail,
       to: contactEmail,
       replyTo: email,
       subject: `[Contact] ${subject} — from ${name}`,
+      html,
       text: `Name: ${name}\nEmail: ${email}\nSubject: ${subject}\n\nMessage:\n${message}`,
     });
 

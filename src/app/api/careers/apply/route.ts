@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { render } from "@react-email/render";
 import { siteConfig } from "@/config/site";
+import ApplicationLeadEmail from "@/emails/ApplicationLeadEmail";
+import ApplicationConfirmEmail from "@/emails/ApplicationConfirmEmail";
+
 
 const recentRequests = new Map<string, number[]>();
 const RATE_LIMIT = 2;
@@ -111,12 +115,33 @@ The Avora Support team
 `.trim();
 
   try {
+    const firstName = fullName.split(" ")[0];
+    const submittedAt = new Date().toLocaleString("en-GB", { timeZone: "Africa/Lagos" });
+
+    const [leadHtml, confirmHtml] = await Promise.all([
+      render(ApplicationLeadEmail({
+        fullName,
+        email,
+        phone: phone || undefined,
+        city,
+        role,
+        experience,
+        availability,
+        writingSample: writingSample || undefined,
+        whyFit,
+        cvAttached: !!cvAttachment,
+        submittedAt,
+      })),
+      render(ApplicationConfirmEmail({ firstName, role })),
+    ]);
+
     await Promise.all([
       resend.emails.send({
         from: fromEmail,
         to: contactEmail,
         replyTo: email,
         subject: `[Application] ${role} — ${fullName}`,
+        html: leadHtml,
         text: internalText,
         ...(cvAttachment
           ? {
@@ -133,6 +158,7 @@ The Avora Support team
         from: fromEmail,
         to: email,
         subject: `Application received — ${siteConfig.name}`,
+        html: confirmHtml,
         text: applicantText,
       }),
     ]);
@@ -143,3 +169,4 @@ The Avora Support team
     return NextResponse.json({ error: "Failed to send" }, { status: 500 });
   }
 }
+
